@@ -1,0 +1,82 @@
+import hashlib
+
+# ====== 1. 基本函数 ======
+def sha256(data: bytes) -> bytes:
+    """计算 SHA-256 哈希"""
+    return hashlib.sha256(data).digest()
+
+def sha256_hex(data: bytes) -> str:
+    """返回 SHA-256 十六进制字符串"""
+    return hashlib.sha256(data).hexdigest()
+
+
+# ====== 2. 初始化叶节点 ======
+leaves = ['usc', 'sysu', 'edu', 'cn', 'http', 'www', 'sse', 'com']
+
+# 对每个叶节点取哈希
+leaf_hashes = [sha256(l.encode('utf-8')) for l in leaves]
+print("=== leaves hash ===")
+for name, h in zip(leaves, leaf_hashes):
+    print(f"{name:5} : {h.hex()}")
+print()
+
+
+# ====== 3. 构造 Merkle Tree 层次结构 ======
+levels = [leaf_hashes]
+
+
+while len(levels[-1]) > 1:
+    current = levels[-1]
+    parent = []
+    for i in range(0, len(current), 2):
+        left = current[i]
+        right = current[i+1]
+        parent_hash = sha256(left + right)
+        parent.append(parent_hash)
+    levels.append(parent)
+
+merkle_root = levels[-1][0].hex()
+
+print("=== Merkle Root ===")
+print(merkle_root, "\n")
+
+
+# ====== 4. 构造 "sysu" 的证明路径 ======
+target_index = leaves.index("sysu")
+proof = []
+directions = []  # 'L' 表示 sibling 在左, 'R' 表示 sibling 在右
+idx = target_index
+
+for level in range(len(levels) - 1):
+    layer = levels[level]
+    if idx % 2 == 0:
+        sib_idx = idx + 1
+        directions.append('R')
+    else:
+        sib_idx = idx - 1
+        directions.append('L')
+    proof.append(layer[sib_idx].hex())
+    idx //= 2  #算余数吗？
+
+print("=== the proof of sysu ===")
+for i, (d, p) in enumerate(zip(directions, proof)):
+    print(f"layer {i}: sibling is on the {'left' if d=='L' else 'right'} -> {p}")
+print()
+
+
+# ====== 5. 验证 "sysu" 是否存在于 Merkle 树中 ======
+cur_hash = sha256("sysu".encode('utf-8'))
+print(f"initial hash H(sysu) = {cur_hash.hex()}")
+
+for d, p_hex in zip(directions, proof):
+    sib = bytes.fromhex(p_hex)
+    if d == 'L':  # sibling 在左
+        cur_hash = sha256(sib + cur_hash)
+    else:         # sibling 在右
+        cur_hash = sha256(cur_hash + sib)
+    print(f"final hash = {cur_hash.hex()}")
+
+print("\nValidation:") 
+print("calculated Root =", cur_hash.hex())
+print("Merkle Tree Root =", merkle_root)
+print("if true?", cur_hash.hex() == merkle_root)
